@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+@theme {
+  --color-teal: #5BBFAD;
+  --color-teal-light: #E8F5F1;
+  --color-teal-dark: #3D9B8A;
+  --color-lavender: #9B8EC4;
+  --color-lavender-light: #EDE8F5;
+  --color-bg: #F7FAF9;
+  --color-card: #FFFFFF;
+  --color-text: #2D3142;
+  --color-text-muted: #9CA3AF;
+  --color-border: #E5E7EB;
+
+  /* shadcn/ui standard tokens — mapped to the app palette */
+  --color-background: #F7FAF9;
+  --color-foreground: #2D3142;
+  --color-muted: #F3F4F6;
+  --color-muted-foreground: #9CA3AF;
+  --color-input: #E5E7EB;
+  --color-ring: #5BBFAD;
+  --color-primary: #5BBFAD;
+  --color-primary-foreground: #FFFFFF;
+  --color-secondary: #E8F5F1;
+  --color-secondary-foreground: #3D9B8A;
+  --color-accent: #E8F5F1;
+  --color-accent-foreground: #3D9B8A;
+  --color-destructive: #EF4444;
+  --color-destructive-foreground: #FFFFFF;
+  --color-popover: #FFFFFF;
+  --color-popover-foreground: #2D3142;
+
+  /* Sidebar tokens */
+  --color-sidebar: #FFFFFF;
+  --color-sidebar-foreground: #2D3142;
+  --color-sidebar-primary: #5BBFAD;
+  --color-sidebar-primary-foreground: #FFFFFF;
+  --color-sidebar-accent: #E8F5F1;
+  --color-sidebar-accent-foreground: #3D9B8A;
+  --color-sidebar-border: #E5E7EB;
+  --color-sidebar-ring: #5BBFAD;
+
+  --color-mood-calm: #81C784;
+  --color-mood-anxious: #FFB74D;
+  --color-mood-determined: #7E57C2;
+  --color-mood-low: #90A4AE;
+  --color-mood-reflective: #4FC3F7;
+  --color-mood-hopeful: #F06292;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+html,
+body {
+  height: 100%;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+/* Streaming cursor animation */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.streaming-cursor::after {
+  content: "▍";
+  animation: blink 1s infinite;
+  color: var(--color-teal);
+}
+
+/* Typing indicator dots */
+@keyframes bounce {
+  0%, 80%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-6px); }
+}
+
+.typing-dot {
+  animation: bounce 1.4s ease-in-out infinite;
+}
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* ─── Sidebar animation tokens ──────────────────────────────────────────────
+   Single source of truth for all sidebar timing.
+   Override --sidebar-duration to 0ms via prefers-reduced-motion below.
+   ─────────────────────────────────────────────────────────────────────────── */
+:root {
+  --sidebar-duration: 280ms;
+  --sidebar-easing: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ─── Reduced-motion: disable all movement, keep instant state changes ────── */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --sidebar-duration: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
