@@ -76,4 +76,5 @@ export interface AppState {
   entries: JournalEntry[];
   draftEntry: Partial<JournalEntry> | null;
   activeTab: ActiveTab;
+  shardBalance: number;
 }

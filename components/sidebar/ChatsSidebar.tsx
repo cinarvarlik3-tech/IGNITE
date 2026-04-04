@@ -1,10 +1,19 @@
 "use client";
 
 import React, { useState } from "react";
-import { TreePine, MessageSquarePlus, Moon, Search, LayoutDashboard, Trash2 } from "lucide-react";
+import {
+  TreePine,
+  MessageSquarePlus,
+  Moon,
+  Search,
+  LayoutDashboard,
+  Trash2,
+  Settings,
+} from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -164,6 +173,22 @@ export default function ChatsSidebar() {
             })
           )}
         </SidebarContent>
+
+        <SidebarFooter className="border-t border-sidebar-border">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                type="button"
+                tooltip="Settings"
+                onClick={() => {}}
+                className="gap-3 font-medium text-sidebar-foreground/80"
+              >
+                <Settings className="h-4 w-4 shrink-0 text-teal" />
+                <span>Settings</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
       </Sidebar>
 
       <SearchChatsModal open={searchOpen} onClose={() => setSearchOpen(false)} />

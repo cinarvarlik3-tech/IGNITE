@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useApp } from "@/context/AppContext";
-import { MessageCircle, GitBranch, BookOpen, PanelLeft } from "lucide-react";
+import { MessageCircle, GitBranch, BookOpen, PanelLeft, Diamond } from "lucide-react";
 import ChatScreen from "@/components/chat/ChatScreen";
 import WhatIfScreen from "@/components/whatif/WhatIfScreen";
 import JournalScreen from "@/components/journal/JournalScreen";
@@ -51,8 +51,8 @@ function AppBody() {
       <SidebarInset className="bg-bg overflow-hidden">
         <div className="flex h-screen flex-col">
           {/* ─── Top Nav ─── */}
-          <header className="flex shrink-0 items-center justify-between border-b border-border bg-card px-4 py-3">
-            <div className="flex items-center gap-2">
+          <header className="flex shrink-0 items-center border-b border-border bg-card px-4 py-3">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
               {/* Reopen button — only visible when left sidebar is collapsed */}
               {isCollapsed && (
                 <button
@@ -65,7 +65,7 @@ function AppBody() {
               )}
             </div>
 
-            <nav className="flex gap-1">
+            <nav className="flex shrink-0 gap-1">
               {TABS.map(({ key, label, icon: Icon }) => {
                 const active = state.activeTab === key;
                 return (
@@ -86,8 +86,22 @@ function AppBody() {
               })}
             </nav>
 
-            {/* Spacer to keep nav centered */}
-            <div className="w-7" />
+            <div className="flex min-w-0 flex-1 items-center justify-end">
+              <div
+                className="flex items-center gap-2 rounded-xl border border-border bg-teal-light/40 px-3 py-1.5"
+                title="Shards"
+              >
+                <Diamond
+                  className="h-4 w-4 shrink-0 text-teal-dark"
+                  aria-hidden
+                  strokeWidth={2}
+                />
+                <span className="text-sm font-medium text-text-muted">Shards</span>
+                <span className="min-w-[2.5rem] text-right text-sm font-semibold tabular-nums text-text">
+                  {state.shardBalance}
+                </span>
+              </div>
+            </div>
           </header>
 
           {/* ─── Body: main content + tree sidebar side by side ─── */}

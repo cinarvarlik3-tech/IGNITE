@@ -40,6 +40,8 @@ interface State {
   activeSessionId: string | null;
   // Right sidebar
   isTreeSidebarOpen: boolean;
+  /** In-app currency; persists in localStorage */
+  shardBalance: number;
 }
 
 const initialState: State = {
@@ -54,6 +56,7 @@ const initialState: State = {
   sessions: [],
   activeSessionId: null,
   isTreeSidebarOpen: false,
+  shardBalance: 1500,
 };
 
 // ─── Actions ────────────────────────────────────────
@@ -76,7 +79,8 @@ type Action =
   | { type: "SAVE_SESSION" }
   | { type: "DELETE_SESSION"; id: string }
   | { type: "SET_SESSION_TITLE"; id: string; title: string }
-  | { type: "SET_TREE_SIDEBAR"; open: boolean };
+  | { type: "SET_TREE_SIDEBAR"; open: boolean }
+  | { type: "CONSUME_SHARDS"; amount?: number };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -121,6 +125,14 @@ function reducer(state: State, action: Action): State {
 
     case "SET_TREE_SIDEBAR":
       return { ...state, isTreeSidebarOpen: action.open };
+
+    case "CONSUME_SHARDS": {
+      const amount = action.amount ?? 2;
+      return {
+        ...state,
+        shardBalance: Math.max(0, state.shardBalance - amount),
+      };
+    }
 
     case "CLEAR_CHAT":
       return { ...state, messages: [], currentTree: null, selectedBranch: null, isTreeSidebarOpen: false };
@@ -248,6 +260,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const entries = storageGet<JournalEntry[]>("journal", []);
     const currentTree = storageGet<WhatIfTree | null>("tree", null);
     const sessions = storageGet<ChatSession[]>("sessions", []);
+    const shardBalance = storageGet("shards", 1500);
 
     // Migrate legacy single-session messages into a session if needed
     let hydratedSessions = sessions;
@@ -276,6 +289,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           entries,
           sessions: hydratedSessions,
           activeSessionId,
+          shardBalance,
         },
       });
       return;
@@ -283,7 +297,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     dispatch({
       type: "HYDRATE",
-      state: { messages, entries, currentTree, sessions: hydratedSessions, activeSessionId },
+      state: {
+        messages,
+        entries,
+        currentTree,
+        sessions: hydratedSessions,
+        activeSessionId,
+        shardBalance,
+      },
     });
   }, []);
 
@@ -295,6 +316,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     storageSet("journal", state.entries);
   }, [state.entries]);
+
+  useEffect(() => {
+    storageSet("shards", state.shardBalance);
+  }, [state.shardBalance]);
 
   // ── Actions ──
 
@@ -351,6 +376,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         timestamp: new Date().toISOString(),
       };
       dispatch({ type: "ADD_MESSAGE", message: userMsg });
+      dispatch({ type: "CONSUME_SHARDS", amount: 2 });
 
       const assistantMsg: Message = {
         id: generateId(),
@@ -370,6 +396,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         history,
         (token) => dispatch({ type: "UPDATE_LAST_ASSISTANT", content: token }),
         () => {
+          dispatch({ type: "CONSUME_SHARDS", amount: 2 });
           dispatch({ type: "SET_STREAMING", value: false });
           dispatch({ type: "SAVE_SESSION" });
         },
@@ -398,6 +425,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }));
       const tree = await generateTree(history);
       dispatch({ type: "SET_TREE", tree });
+      dispatch({ type: "CONSUME_SHARDS", amount: 2 });
       dispatch({ type: "SAVE_SESSION" });
     } catch (err) {
       console.error("Tree generation error:", err);
