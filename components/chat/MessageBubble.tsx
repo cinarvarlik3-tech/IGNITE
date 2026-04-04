@@ -2,14 +2,23 @@
 
 import type { Message } from "@/types";
 import { formatTime } from "@/lib/utils";
-import { TreePine } from "lucide-react";
+import { Sparkles, TreePine } from "lucide-react";
 
 interface Props {
   message: Message;
   isStreaming?: boolean;
+  showOutcomesButton?: boolean;
+  outcomesDisabled?: boolean;
+  onRequestOutcomes?: () => void;
 }
 
-export default function MessageBubble({ message, isStreaming }: Props) {
+export default function MessageBubble({
+  message,
+  isStreaming,
+  showOutcomesButton,
+  outcomesDisabled,
+  onRequestOutcomes,
+}: Props) {
   const isUser = message.role === "user";
 
   return (
@@ -32,6 +41,19 @@ export default function MessageBubble({ message, isStreaming }: Props) {
         <p className={`text-[15px] leading-relaxed whitespace-pre-wrap ${isStreaming && message.content ? "streaming-cursor" : ""}`}>
           {message.content}
         </p>
+        {!isUser && showOutcomesButton && onRequestOutcomes && (
+          <div className="mt-2 flex justify-start">
+            <button
+              type="button"
+              onClick={onRequestOutcomes}
+              disabled={outcomesDisabled}
+              className="inline-flex items-center gap-1 rounded-md bg-lavender px-2 py-1 text-[11px] font-medium text-white shadow-sm transition-colors hover:bg-lavender/90 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              <Sparkles className="h-3 w-3 shrink-0" />
+              See alternative outcomes
+            </button>
+          </div>
+        )}
         <p
           className={`mt-1.5 text-xs ${
             isUser ? "text-white/60" : "text-text-muted"

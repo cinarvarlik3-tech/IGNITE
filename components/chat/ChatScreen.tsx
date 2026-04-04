@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useApp } from "@/context/AppContext";
+import { shouldShowOutcomesButton } from "@/lib/chat-outcomes";
 import { Send, Sparkles, RotateCcw } from "lucide-react";
 import MessageBubble from "./MessageBubble";
 import TypingIndicator from "./TypingIndicator";
@@ -11,8 +12,6 @@ export default function ChatScreen() {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  const canGenerateTree = state.messages.length >= 4 && !state.isStreaming;
 
   // Auto-scroll on new messages or streaming
   useEffect(() => {
@@ -64,6 +63,13 @@ export default function ChatScreen() {
                 i === state.messages.length - 1 &&
                 msg.role === "assistant"
               }
+              showOutcomesButton={shouldShowOutcomesButton(
+                state.messages,
+                i,
+                state.isStreaming
+              )}
+              outcomesDisabled={state.isTreeLoading}
+              onRequestOutcomes={() => requestTree(i)}
             />
           ))}
 
@@ -73,19 +79,6 @@ export default function ChatScreen() {
             )}
         </div>
       </div>
-
-      {/* ─── Tree CTA ─── */}
-      {canGenerateTree && (
-        <div className="flex justify-center pb-2">
-          <button
-            onClick={requestTree}
-            className="flex items-center gap-2 rounded-full bg-lavender px-5 py-2.5 text-sm font-medium text-white shadow-md transition-all hover:bg-lavender/90 hover:shadow-lg"
-          >
-            <Sparkles className="h-4 w-4" />
-            See alternative outcomes →
-          </button>
-        </div>
-      )}
 
       {/* ─── Input Bar ─── */}
       <div className="border-t border-border bg-card px-4 py-3">

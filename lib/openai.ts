@@ -1,4 +1,5 @@
-import type { Message, WhatIfTree } from "@/types";
+import type { WhatIfTree } from "@/types";
+import { normalizeWhatIfTree } from "@/lib/tree-utils";
 
 /**
  * Stream a chat response from /api/chat.
@@ -18,7 +19,19 @@ export async function streamChat(
     });
 
     if (!res.ok) {
-      throw new Error(`Chat API error: ${res.status}`);
+      let detail = "";
+      const text = await res.text();
+      try {
+        const j = JSON.parse(text) as { error?: string };
+        if (typeof j?.error === "string") detail = j.error;
+      } catch {
+        if (text) detail = text.slice(0, 500);
+      }
+      throw new Error(
+        detail
+          ? `Chat API error: ${res.status} — ${detail}`
+          : `Chat API error: ${res.status}`
+      );
     }
 
     const reader = res.body?.getReader();
@@ -61,25 +74,68 @@ export async function streamChat(
   }
 }
 
-/**
- * Generate a What-If tree from the conversation.
- */
-export async function generateTree(
+async function parseTreeResponse(res: Response): Promise<WhatIfTree> {
+  if (!res.ok) {
+    let detail = "";
+    const text = await res.text();
+    try {
+      const j = JSON.parse(text) as { error?: string };
+      if (typeof j?.error === "string") detail = j.error;
+    } catch {
+      if (text) detail = text.slice(0, 500);
+    }
+    throw new Error(
+      detail ? `Tree API error: ${res.status} — ${detail}` : `Tree API error: ${res.status}`
+    );
+  }
+  const raw = await res.json();
+  const normalized = normalizeWhatIfTree(raw);
+  if (!normalized) {
+    throw new Error("Invalid tree payload");
+  }
+  return {
+    ...normalized,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+/** First outcomes tree for a conversation (three top-level paths). */
+export async function createOutcomesTree(
   messages: { role: string; content: string }[]
 ): Promise<WhatIfTree> {
-  const res = await fetch("/api/generate-tree", {
+  const res = await fetch("/api/create-tree", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ messages }),
   });
+  return parseTreeResponse(res);
+}
 
-  if (!res.ok) {
-    throw new Error(`Tree API error: ${res.status}`);
+/** Add sub-branches; server requires all previous node ids to remain. */
+export async function expandOutcomesTree(
+  messages: { role: string; content: string }[],
+  currentTree: WhatIfTree,
+  hintParentNodeId?: string | null
+): Promise<WhatIfTree> {
+  const res = await fetch("/api/expand-tree", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      messages,
+      currentTree,
+      ...(hintParentNodeId ? { hintParentNodeId } : {}),
+    }),
+  });
+  return parseTreeResponse(res);
+}
+
+/** @deprecated Use createOutcomesTree or expandOutcomesTree */
+export async function generateTree(
+  messages: { role: string; content: string }[],
+  options?: { previousTree?: WhatIfTree | null }
+): Promise<WhatIfTree> {
+  if (options?.previousTree) {
+    return expandOutcomesTree(messages, options.previousTree, null);
   }
-
-  const tree = await res.json();
-  return {
-    ...tree,
-    generatedAt: new Date().toISOString(),
-  } as WhatIfTree;
+  return createOutcomesTree(messages);
 }

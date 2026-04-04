@@ -3,14 +3,13 @@
 import { useApp } from "@/context/AppContext";
 import { GitBranch, Loader2, MessageCircle } from "lucide-react";
 import RootNode from "./RootNode";
-import BranchCard from "./BranchCard";
-import { motion, AnimatePresence } from "framer-motion";
+import HierarchicalOutcomeTree from "./HierarchicalOutcomeTree";
+import { motion } from "framer-motion";
 
 export default function WhatIfScreen() {
-  const { state, setTab } = useApp();
+  const { state, setTab, removeTreeNodesWithDescendants } = useApp();
   const { currentTree, isTreeLoading } = state;
 
-  // Loading state
   if (isTreeLoading) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4">
@@ -25,7 +24,6 @@ export default function WhatIfScreen() {
     );
   }
 
-  // Empty state — no tree generated yet
   if (!currentTree) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
@@ -48,96 +46,38 @@ export default function WhatIfScreen() {
     );
   }
 
-  // Tree visualization
   return (
-    <div className="h-full overflow-y-auto px-4 py-8">
-      <div className="mx-auto max-w-3xl">
-        {/* Situation summary */}
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="mx-auto min-h-0 w-full min-w-0 max-w-[min(100%,96rem)] flex-1 overflow-auto px-3 py-3 sm:px-5 sm:py-4">
         <motion.p
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8 text-center text-sm text-text-muted"
+          className="mb-3 line-clamp-2 text-center text-[11px] leading-snug text-text-muted sm:text-xs"
         >
           {currentTree.situation}
         </motion.p>
 
-        {/* Root node */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
+          className="min-w-0"
         >
-          <RootNode root={currentTree.root} />
+          <RootNode root={currentTree.root} slim />
         </motion.div>
 
-        {/* Connector line */}
-        <div className="flex justify-center">
-          <div className="h-10 w-px bg-border" />
-        </div>
-
-        {/* Branch split indicator */}
-        <div className="flex justify-center">
-          <div className="flex items-center gap-2 rounded-full bg-lavender-light px-4 py-1.5">
-            <GitBranch className="h-3.5 w-3.5 text-lavender" />
-            <span className="text-xs font-medium text-lavender">
-              Alternative paths
-            </span>
-          </div>
-        </div>
-
-        {/* Connector lines to branches */}
-        <div className="flex justify-center">
-          <svg
-            width="600"
-            height="40"
-            viewBox="0 0 600 40"
-            className="mx-auto max-w-full"
-          >
-            <motion.path
-              d="M300 0 L100 40"
-              stroke="#E5E7EB"
-              strokeWidth="1.5"
-              fill="none"
-              initial={{ pathLength: 0 }}
-              animate={{ pathLength: 1 }}
-              transition={{ delay: 0.4, duration: 0.5 }}
-            />
-            <motion.path
-              d="M300 0 L300 40"
-              stroke="#E5E7EB"
-              strokeWidth="1.5"
-              fill="none"
-              initial={{ pathLength: 0 }}
-              animate={{ pathLength: 1 }}
-              transition={{ delay: 0.5, duration: 0.5 }}
-            />
-            <motion.path
-              d="M300 0 L500 40"
-              stroke="#E5E7EB"
-              strokeWidth="1.5"
-              fill="none"
-              initial={{ pathLength: 0 }}
-              animate={{ pathLength: 1 }}
-              transition={{ delay: 0.6, duration: 0.5 }}
-            />
-          </svg>
-        </div>
-
-        {/* Branch cards */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <AnimatePresence>
-            {currentTree.branches.map((branch, i) => (
-              <motion.div
-                key={branch.id}
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5 + i * 0.15, duration: 0.4 }}
-              >
-                <BranchCard branch={branch} />
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="min-w-0"
+        >
+          <HierarchicalOutcomeTree
+            tree={currentTree}
+            variant="compact"
+            onDeleteOutcome={removeTreeNodesWithDescendants}
+          />
+        </motion.div>
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ import React, {
   useReducer,
   useEffect,
   useCallback,
+  useRef,
   type ReactNode,
 } from "react";
 import type {
@@ -13,13 +14,20 @@ import type {
   WhatIfTree,
   Branch,
   JournalEntry,
+  JournalEntryAnalysis,
   ActiveTab,
   MoodKey,
   ChatSession,
 } from "@/types";
 import { storageGet, storageSet } from "@/lib/storage";
 import { generateId } from "@/lib/utils";
-import { streamChat, generateTree } from "@/lib/openai";
+import { deriveDisplayTitle } from "@/lib/journal-utils";
+import { streamChat, createOutcomesTree, expandOutcomesTree } from "@/lib/openai";
+import { shouldShowOutcomesButton } from "@/lib/chat-outcomes";
+import {
+  normalizeWhatIfTree,
+  collectSubtreeIdsIncludingSelf,
+} from "@/lib/tree-utils";
 
 // ─── State ──────────────────────────────────────────
 
@@ -70,6 +78,7 @@ type Action =
   | { type: "SET_TREE_LOADING"; value: boolean }
   | { type: "SELECT_BRANCH"; branch: Branch | null }
   | { type: "ADD_ENTRY"; entry: JournalEntry }
+  | { type: "UPDATE_JOURNAL_ENTRY"; id: string; patch: Partial<JournalEntry> }
   | { type: "DELETE_ENTRY"; id: string }
   | { type: "SET_DRAFT"; draft: Partial<JournalEntry> | null }
   | { type: "HYDRATE"; state: Partial<State> }
@@ -80,7 +89,9 @@ type Action =
   | { type: "DELETE_SESSION"; id: string }
   | { type: "SET_SESSION_TITLE"; id: string; title: string }
   | { type: "SET_TREE_SIDEBAR"; open: boolean }
-  | { type: "CONSUME_SHARDS"; amount?: number };
+  | { type: "CONSUME_SHARDS"; amount?: number }
+  | { type: "REMOVE_TREE_NODES"; nodeId: string }
+  | { type: "MARK_TREE_INITIALIZED" };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -114,6 +125,14 @@ function reducer(state: State, action: Action): State {
     case "ADD_ENTRY":
       return { ...state, entries: [action.entry, ...state.entries] };
 
+    case "UPDATE_JOURNAL_ENTRY":
+      return {
+        ...state,
+        entries: state.entries.map((e) =>
+          e.id === action.id ? { ...e, ...action.patch } : e
+        ),
+      };
+
     case "DELETE_ENTRY":
       return { ...state, entries: state.entries.filter((e) => e.id !== action.id) };
 
@@ -134,8 +153,21 @@ function reducer(state: State, action: Action): State {
       };
     }
 
-    case "CLEAR_CHAT":
-      return { ...state, messages: [], currentTree: null, selectedBranch: null, isTreeSidebarOpen: false };
+    case "CLEAR_CHAT": {
+      const sessions = state.activeSessionId
+        ? state.sessions.map((s) =>
+            s.id === state.activeSessionId ? { ...s, treeCreationDone: false } : s
+          )
+        : state.sessions;
+      return {
+        ...state,
+        sessions,
+        messages: [],
+        currentTree: null,
+        selectedBranch: null,
+        isTreeSidebarOpen: false,
+      };
+    }
 
     case "NEW_CHAT": {
       // Persist current session if it has messages
@@ -154,16 +186,35 @@ function reducer(state: State, action: Action): State {
 
     case "LOAD_SESSION": {
       const updatedSessions = persistCurrentSession(state);
+      const loadedTree = action.session.currentTree
+        ? normalizeWhatIfTree(action.session.currentTree) ??
+          action.session.currentTree
+        : null;
       return {
         ...state,
         sessions: updatedSessions,
         activeSessionId: action.session.id,
         messages: action.session.messages,
-        currentTree: action.session.currentTree,
+        currentTree: loadedTree,
         selectedBranch: null,
         activeTab: "chat",
         isTreeSidebarOpen: false,
       };
+    }
+
+    case "REMOVE_TREE_NODES": {
+      if (!state.currentTree) return state;
+      const removeIds = collectSubtreeIdsIncludingSelf(
+        action.nodeId,
+        state.currentTree.nodes
+      );
+      const nodes = state.currentTree.nodes.filter((n) => !removeIds.has(n.id));
+      const nextTree = { ...state.currentTree, nodes };
+      const sel =
+        state.selectedBranch && removeIds.has(state.selectedBranch.id)
+          ? null
+          : state.selectedBranch;
+      return { ...state, currentTree: nextTree, selectedBranch: sel };
     }
 
     case "SAVE_SESSION": {
@@ -172,7 +223,13 @@ function reducer(state: State, action: Action): State {
       const updatedSessions = state.sessions.map((s) => {
         if (s.id !== state.activeSessionId) return s;
         const title = s.title || deriveTitle(state.messages);
-        return { ...s, title, messages: state.messages, currentTree: state.currentTree, updatedAt: now };
+        return {
+          ...s,
+          title,
+          messages: state.messages,
+          currentTree: state.currentTree,
+          updatedAt: now,
+        };
       });
       return { ...state, sessions: updatedSessions };
     }
@@ -201,6 +258,16 @@ function reducer(state: State, action: Action): State {
       return { ...state, sessions: updatedSessions };
     }
 
+    case "MARK_TREE_INITIALIZED": {
+      if (!state.activeSessionId) return state;
+      return {
+        ...state,
+        sessions: state.sessions.map((s) =>
+          s.id === state.activeSessionId ? { ...s, treeCreationDone: true } : s
+        ),
+      };
+    }
+
     default:
       return state;
   }
@@ -215,6 +282,21 @@ function deriveTitle(messages: Message[]): string {
   return text.length > 42 ? text.slice(0, 42) + "…" : text;
 }
 
+function normalizeStoredTree(tree: WhatIfTree | null): WhatIfTree | null {
+  if (!tree) return null;
+  return normalizeWhatIfTree(tree) ?? tree;
+}
+
+function withSessionTreeFlags(session: ChatSession): ChatSession {
+  const t = normalizeStoredTree(session.currentTree);
+  const hasNodes = !!t?.nodes?.length;
+  return {
+    ...session,
+    treeCreationDone:
+      session.treeCreationDone !== undefined ? session.treeCreationDone : hasNodes,
+  };
+}
+
 function persistCurrentSession(state: State): ChatSession[] {
   if (!state.activeSessionId || state.messages.length === 0) return state.sessions;
   const now = new Date().toISOString();
@@ -223,7 +305,13 @@ function persistCurrentSession(state: State): ChatSession[] {
   return state.sessions.map((s) => {
     if (s.id !== state.activeSessionId) return s;
     const title = s.title || deriveTitle(state.messages);
-    return { ...s, title, messages: state.messages, currentTree: state.currentTree, updatedAt: now };
+    return {
+      ...s,
+      title,
+      messages: state.messages,
+      currentTree: state.currentTree,
+      updatedAt: now,
+    };
   });
 }
 
@@ -233,10 +321,17 @@ interface AppContextValue {
   state: State;
   setTab: (tab: ActiveTab) => void;
   sendMessage: (content: string) => Promise<void>;
-  requestTree: () => Promise<void>;
+  /** `endIndexInclusive` — last message included in tree context (the assistant message whose button was pressed). */
+  requestTree: (endIndexInclusive: number) => Promise<void>;
   selectBranch: (branch: Branch | null) => void;
   reflectOnBranch: (branch: Branch) => void;
-  saveEntry: (text: string, mood: MoodKey) => void;
+  saveEntry: (
+    text: string,
+    mood: MoodKey,
+    meta?: { analysis?: JournalEntryAnalysis; displayTitle?: string }
+  ) => string;
+  updateJournalEntry: (id: string, patch: Partial<JournalEntry>) => void;
+  consumeShards: (amount?: number) => void;
   deleteEntry: (id: string) => void;
   clearDraft: () => void;
   clearChat: () => void;
@@ -245,6 +340,10 @@ interface AppContextValue {
   deleteSession: (id: string) => void;
   openTreeSidebar: () => void;
   closeTreeSidebar: () => void;
+  /** New empty chat + first user message with journal summary (after next paint). */
+  startChatWithJournalSummary: (summary: string) => void;
+  /** Remove one outcome and all nested sub-outcomes beneath it. */
+  removeTreeNodesWithDescendants: (nodeId: string) => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -253,12 +352,14 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const journalChatSeedRef = useRef<string | null>(null);
 
   // Hydrate from localStorage on mount
   useEffect(() => {
     const messages = storageGet<Message[]>("messages", []);
     const entries = storageGet<JournalEntry[]>("journal", []);
-    const currentTree = storageGet<WhatIfTree | null>("tree", null);
+    const rawTree = storageGet<WhatIfTree | null>("tree", null);
+    const currentTree = normalizeStoredTree(rawTree);
     const sessions = storageGet<ChatSession[]>("sessions", []);
     const shardBalance = storageGet("shards", 1500);
 
@@ -268,24 +369,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     if (sessions.length === 0 && messages.length > 0) {
       // Legacy data — wrap it in a session
-      const legacySession: ChatSession = {
+      const legacySession: ChatSession = withSessionTreeFlags({
         id: generateId(),
         title: deriveTitle(messages),
         messages,
         currentTree,
         createdAt: messages[0]?.timestamp ?? new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-      };
+      });
       hydratedSessions = [legacySession];
       activeSessionId = legacySession.id;
     } else if (sessions.length > 0) {
-      activeSessionId = sessions[0].id;
-      const latest = sessions[0];
+      hydratedSessions = sessions.map(withSessionTreeFlags);
+      const latest = hydratedSessions[0];
+      activeSessionId = latest.id;
       dispatch({
         type: "HYDRATE",
         state: {
           messages: latest.messages,
-          currentTree: latest.currentTree,
+          currentTree: normalizeStoredTree(latest.currentTree),
           entries,
           sessions: hydratedSessions,
           activeSessionId,
@@ -333,11 +435,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       title: "",
       messages: [],
       currentTree: null,
+      treeCreationDone: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
     dispatch({ type: "NEW_CHAT", session });
   }, []);
+
+  const startChatWithJournalSummary = useCallback(
+    (summary: string) => {
+      const prompt = `I'd like to talk about something from my journal today:\n\n${summary}`;
+      journalChatSeedRef.current = prompt;
+      newChat();
+    },
+    [newChat]
+  );
 
   const loadSession = useCallback(
     (id: string) => {
@@ -362,6 +474,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           title: "",
           messages: [],
           currentTree: null,
+          treeCreationDone: false,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -414,25 +527,95 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [state.messages, state.activeSessionId]
   );
 
-  const requestTree = useCallback(async () => {
-    dispatch({ type: "SET_TREE_LOADING", value: true });
-    dispatch({ type: "SET_TREE_SIDEBAR", open: true }); // Open sidebar immediately (loading state visible)
+  // Send seeded message after NEW_CHAT leaves the thread empty (avoids stale sendMessage state).
+  useEffect(() => {
+    const seed = journalChatSeedRef.current;
+    if (seed === null) return;
+    if (state.activeTab !== "chat") return;
+    if (state.messages.length !== 0) return;
+    if (state.isStreaming) return;
+    if (!state.activeSessionId) return;
 
-    try {
-      const history = state.messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
-      const tree = await generateTree(history);
-      dispatch({ type: "SET_TREE", tree });
-      dispatch({ type: "CONSUME_SHARDS", amount: 2 });
-      dispatch({ type: "SAVE_SESSION" });
-    } catch (err) {
-      console.error("Tree generation error:", err);
-    } finally {
-      dispatch({ type: "SET_TREE_LOADING", value: false });
+    journalChatSeedRef.current = null;
+    void sendMessage(seed);
+  }, [
+    state.activeTab,
+    state.messages,
+    state.isStreaming,
+    state.activeSessionId,
+    sendMessage,
+  ]);
+
+  const requestTree = useCallback(
+    async (endIndexInclusive: number) => {
+      dispatch({ type: "SET_TREE_LOADING", value: true });
+      dispatch({ type: "SET_TREE_SIDEBAR", open: true });
+
+      try {
+        const slice = state.messages.slice(0, endIndexInclusive + 1);
+        const history = slice.map((m) => ({
+          role: m.role,
+          content: m.content,
+        }));
+        const hasTree =
+          state.currentTree != null && state.currentTree.nodes.length > 0;
+
+        let tree: WhatIfTree;
+        if (hasTree) {
+          tree = await expandOutcomesTree(
+            history,
+            state.currentTree!,
+            state.selectedBranch?.id ?? null
+          );
+        } else {
+          tree = await createOutcomesTree(history);
+          dispatch({ type: "MARK_TREE_INITIALIZED" });
+        }
+
+        dispatch({ type: "SET_TREE", tree });
+        dispatch({ type: "CONSUME_SHARDS", amount: 2 });
+        dispatch({ type: "SAVE_SESSION" });
+      } catch (err) {
+        console.error("Tree generation error:", err);
+      } finally {
+        dispatch({ type: "SET_TREE_LOADING", value: false });
+      }
+    },
+    [state.messages, state.currentTree, state.selectedBranch]
+  );
+
+  const wasStreamingRef = useRef(false);
+  const lastAutoTreeForAssistantIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (state.messages.length === 0) {
+      lastAutoTreeForAssistantIdRef.current = null;
     }
-  }, [state.messages]);
+  }, [state.messages.length]);
+
+  useEffect(() => {
+    const wasStreaming = wasStreamingRef.current;
+    wasStreamingRef.current = state.isStreaming;
+
+    if (!wasStreaming || state.isStreaming) return;
+    if (state.activeTab !== "chat") return;
+    if (state.isTreeLoading) return;
+
+    const lastIdx = state.messages.length - 1;
+    const last = state.messages[lastIdx];
+    if (!last || last.role !== "assistant" || !last.content.trim()) return;
+    if (!shouldShowOutcomesButton(state.messages, lastIdx, false)) return;
+    if (last.id === lastAutoTreeForAssistantIdRef.current) return;
+
+    lastAutoTreeForAssistantIdRef.current = last.id;
+    void requestTree(lastIdx);
+  }, [
+    state.isStreaming,
+    state.messages,
+    state.activeTab,
+    state.isTreeLoading,
+    requestTree,
+  ]);
 
   const openTreeSidebar = useCallback(() => {
     dispatch({ type: "SET_TREE_SIDEBAR", open: true });
@@ -458,19 +641,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const saveEntry = useCallback(
-    (text: string, mood: MoodKey) => {
+    (
+      text: string,
+      mood: MoodKey,
+      meta?: { analysis?: JournalEntryAnalysis; displayTitle?: string }
+    ) => {
+      const id = generateId();
       const entry: JournalEntry = {
-        id: generateId(),
+        id,
         text,
         mood,
         createdAt: new Date().toISOString(),
         linkedBranch: state.draftEntry?.linkedBranch,
+        displayTitle: meta?.displayTitle?.trim() || deriveDisplayTitle(text),
+        analysis: meta?.analysis,
       };
       dispatch({ type: "ADD_ENTRY", entry });
       dispatch({ type: "SET_DRAFT", draft: null });
+      return id;
     },
     [state.draftEntry]
   );
+
+  const updateJournalEntry = useCallback((id: string, patch: Partial<JournalEntry>) => {
+    dispatch({ type: "UPDATE_JOURNAL_ENTRY", id, patch });
+  }, []);
+
+  const consumeShards = useCallback((amount = 2) => {
+    dispatch({ type: "CONSUME_SHARDS", amount });
+  }, []);
 
   const deleteEntry = useCallback((id: string) => {
     dispatch({ type: "DELETE_ENTRY", id });
@@ -486,6 +685,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     storageSet("tree", null);
   }, []);
 
+  const removeTreeNodesWithDescendants = useCallback((nodeId: string) => {
+    dispatch({ type: "REMOVE_TREE_NODES", nodeId });
+    dispatch({ type: "SAVE_SESSION" });
+  }, []);
+
   return (
     <AppContext.Provider
       value={{
@@ -496,6 +700,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         selectBranch,
         reflectOnBranch,
         saveEntry,
+        updateJournalEntry,
+        consumeShards,
         deleteEntry,
         clearDraft,
         clearChat,
@@ -504,6 +710,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         deleteSession,
         openTreeSidebar,
         closeTreeSidebar,
+        startChatWithJournalSummary,
+        removeTreeNodesWithDescendants,
       }}
     >
       {children}

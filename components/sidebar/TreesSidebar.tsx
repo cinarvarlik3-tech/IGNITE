@@ -11,8 +11,8 @@ import {
   MessageCircle,
 } from "lucide-react";
 import RootNode from "@/components/whatif/RootNode";
-import BranchCard from "@/components/whatif/BranchCard";
-import { motion, AnimatePresence } from "framer-motion";
+import HierarchicalOutcomeTree from "@/components/whatif/HierarchicalOutcomeTree";
+import { motion } from "framer-motion";
 
 // ─── Animation constants ─────────────────────────────
 // These are CSS custom property values; JS only needs them for the
@@ -23,7 +23,8 @@ const SIDEBAR_EASING = "cubic-bezier(0.4, 0, 0.2, 1)";
 // ─── Component ───────────────────────────────────────
 
 export default function TreesSidebar() {
-  const { state, setTab, closeTreeSidebar } = useApp();
+  const { state, setTab, closeTreeSidebar, removeTreeNodesWithDescendants } =
+    useApp();
   const { isTreeSidebarOpen, currentTree, isTreeLoading } = state;
   const [expanded, setExpanded] = useState(true);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
@@ -113,9 +114,9 @@ export default function TreesSidebar() {
         </div>
 
         {/* ── Main panel content ── */}
-        <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {/* Header */}
-          <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
+          <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2.5">
             <div className="flex items-center gap-2">
               <GitBranch className="h-4 w-4 text-lavender" />
               <span className="text-sm font-semibold text-text">
@@ -133,8 +134,8 @@ export default function TreesSidebar() {
             </button>
           </div>
 
-          {/* Scrollable tree area */}
-          <div className="flex-1 overflow-y-auto">
+          {/* Tree may be wider than panel — scroll horizontally and vertically */}
+          <div className="min-h-0 flex-1 overflow-auto">
             {isTreeLoading ? (
               /* ── Loading ── */
               <div className="flex h-full flex-col items-center justify-center gap-4">
@@ -168,12 +169,12 @@ export default function TreesSidebar() {
               </div>
             ) : (
               /* ── Tree ── */
-              <div className="px-4 py-6">
+              <div className="min-w-0 px-3 py-3">
                 {/* Situation summary */}
                 <motion.p
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="mb-6 text-center text-xs text-text-muted"
+                  className="mb-3 line-clamp-2 text-center text-[11px] leading-snug text-text-muted"
                 >
                   {currentTree.situation}
                 </motion.p>
@@ -184,70 +185,20 @@ export default function TreesSidebar() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.1 }}
                 >
-                  <RootNode root={currentTree.root} />
+                  <RootNode root={currentTree.root} slim />
                 </motion.div>
 
-                {/* Connector line */}
-                <div className="flex justify-center">
-                  <div className="h-8 w-px bg-border" />
-                </div>
-
-                {/* Branch split badge */}
-                <div className="flex justify-center">
-                  <div className="flex items-center gap-2 rounded-full bg-lavender-light px-3 py-1">
-                    <GitBranch className="h-3 w-3 text-lavender" />
-                    <span className="text-xs font-medium text-lavender">
-                      Alternative paths
-                    </span>
-                  </div>
-                </div>
-
-                {/* Animated SVG connector lines */}
-                <div className="flex justify-center">
-                  <svg
-                    width="400"
-                    height="30"
-                    viewBox="0 0 400 30"
-                    aria-hidden="true"
-                    className="mx-auto max-w-full"
-                  >
-                    {[
-                      "M200 0 L67 30",
-                      "M200 0 L200 30",
-                      "M200 0 L333 30",
-                    ].map((d, i) => (
-                      <motion.path
-                        key={d}
-                        d={d}
-                        stroke="#E5E7EB"
-                        strokeWidth="1.5"
-                        fill="none"
-                        initial={{ pathLength: 0 }}
-                        animate={{ pathLength: 1 }}
-                        transition={{ delay: 0.4 + i * 0.1, duration: 0.5 }}
-                      />
-                    ))}
-                  </svg>
-                </div>
-
-                {/* Branch cards — single column in sidebar */}
-                <div className="space-y-3">
-                  <AnimatePresence>
-                    {currentTree.branches.map((branch, i) => (
-                      <motion.div
-                        key={branch.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{
-                          delay: 0.5 + i * 0.15,
-                          duration: 0.4,
-                        }}
-                      >
-                        <BranchCard branch={branch} />
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-                </div>
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                >
+                  <HierarchicalOutcomeTree
+                    tree={currentTree}
+                    variant="compact"
+                    onDeleteOutcome={removeTreeNodesWithDescendants}
+                  />
+                </motion.div>
               </div>
             )}
           </div>

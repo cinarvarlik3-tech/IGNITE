@@ -12,7 +12,8 @@ export interface Message {
 export interface WhatIfTree {
   situation: string;
   root: TreeRoot;
-  branches: Branch[];
+  /** Flat forest: parentId null = alternative from scenario root; else id of parent outcome */
+  nodes: TreeNode[];
   generatedAt: string;
 }
 
@@ -22,14 +23,19 @@ export interface TreeRoot {
   emotion: string;
 }
 
-export interface Branch {
+export interface TreeNode {
   id: string;
+  /** null = direct alternative to “what actually happened”; otherwise parent outcome id */
+  parentId: string | null;
   title: string;
   description: string;
   emotion: string;
   likelihood: "likely" | "possible" | "unlikely";
   insight: string;
 }
+
+/** Alias for journal / selection APIs */
+export type Branch = TreeNode;
 
 // ─── Journal ────────────────────────────────────────
 
@@ -41,6 +47,15 @@ export type MoodKey =
   | "reflective"
   | "hopeful";
 
+export interface JournalEntryAnalysis {
+  reflection: string;
+  /** Three lines, newline-separated */
+  haiku: string;
+  feelings: string[];
+  people: string[];
+  generatedAt: string;
+}
+
 export interface JournalEntry {
   id: string;
   text: string;
@@ -50,6 +65,9 @@ export interface JournalEntry {
     title: string;
     description: string;
   };
+  /** Short title for list + header; derived on save if omitted */
+  displayTitle?: string;
+  analysis?: JournalEntryAnalysis;
 }
 
 // ─── Chat Session ────────────────────────────────────
@@ -59,6 +77,8 @@ export interface ChatSession {
   title: string;
   messages: Message[];
   currentTree: WhatIfTree | null;
+  /** After first successful create-tree; persisted for session bookkeeping */
+  treeCreationDone?: boolean;
   createdAt: string;
   updatedAt: string;
 }
