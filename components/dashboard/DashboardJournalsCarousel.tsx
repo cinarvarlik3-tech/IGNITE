@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import Link from "next/link";
 import { useRef, useCallback, useState, useEffect, useLayoutEffect } from "react";
 import { cn } from "@/lib/utils";
 import { DASHBOARD_JOURNAL_SECTIONS } from "@/constants/dashboard-journals";
@@ -15,6 +16,7 @@ export type { JournalPromptBadge, JournalPromptItem, JournalPromptSection };
 const CARD_DOM_ID = (id: string) => `journal-card-${id}`;
 const MAX_VISIBLE = 4;
 const CARD_WIDTH_PX = 260;
+const KNOWING_YOUR_NEEDS_ID = "knowing-your-needs";
 
 function gapPx(): number {
   if (typeof window === "undefined") return 24;
@@ -208,17 +210,16 @@ function BadgeChip({ badge }: { badge: JournalPromptBadge }) {
 }
 
 function JournalPromptCard({ item }: { item: JournalPromptItem }) {
-  return (
-    <div
-      id={CARD_DOM_ID(item.id)}
-      style={{ width: CARD_WIDTH_PX, height: CARD_WIDTH_PX }}
-      className={cn(
-        "relative flex shrink-0 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-lg border border-border bg-card p-4 text-center shadow-sm transition-all duration-200",
-        "motion-safe:hover:-translate-y-1 motion-safe:hover:shadow-lg",
-        "hover:border-teal/35 focus-within:ring-2 focus-within:ring-teal",
-        item.badge === "recommended" && "ring-2 ring-teal/35"
-      )}
-    >
+  const cardClass = cn(
+    "relative flex shrink-0 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-lg border border-border bg-card p-4 text-center shadow-sm transition-all duration-200",
+    "motion-safe:hover:-translate-y-1 motion-safe:hover:shadow-lg",
+    "hover:border-teal/35 focus-within:ring-2 focus-within:ring-teal",
+    item.badge === "recommended" && "ring-2 ring-teal/35"
+  );
+  const cardStyle = { width: CARD_WIDTH_PX, height: CARD_WIDTH_PX };
+
+  const inner = (
+    <>
       {item.badge && (
         <div className="absolute right-2 top-2 max-w-[calc(100%-1rem)]">
           <BadgeChip badge={item.badge} />
@@ -226,7 +227,7 @@ function JournalPromptCard({ item }: { item: JournalPromptItem }) {
       )}
 
       <div
-        className="mb-3 flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-teal-light/70 text-xl leading-none"
+        className="mb-2 flex h-[6.5rem] w-[6.5rem] shrink-0 items-center justify-center rounded-full bg-teal-light/70 text-[2.75rem] leading-none sm:h-28 sm:w-28 sm:text-6xl"
         aria-hidden
       >
         {item.icon}
@@ -235,9 +236,31 @@ function JournalPromptCard({ item }: { item: JournalPromptItem }) {
       <h3 className="line-clamp-2 font-medium leading-snug text-text">
         {item.title}
       </h3>
-      <p className="mt-1.5 line-clamp-2 text-xs leading-snug text-text-muted">
-        {item.subtitle}
-      </p>
+      {item.subtitle.trim() !== "" && (
+        <p className="mt-1.5 line-clamp-2 text-xs leading-snug text-text-muted">
+          {item.subtitle}
+        </p>
+      )}
+    </>
+  );
+
+  if (item.id === KNOWING_YOUR_NEEDS_ID) {
+    return (
+      <Link
+        id={CARD_DOM_ID(item.id)}
+        href="/journal/prompts/knowing-your-needs"
+        className={cardClass}
+        style={cardStyle}
+        aria-label={`Open guided flow: ${item.title}`}
+      >
+        {inner}
+      </Link>
+    );
+  }
+
+  return (
+    <div id={CARD_DOM_ID(item.id)} style={cardStyle} className={cardClass}>
+      {inner}
     </div>
   );
 }

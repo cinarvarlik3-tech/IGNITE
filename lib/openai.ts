@@ -74,6 +74,94 @@ export async function streamChat(
   }
 }
 
+type NeedsScope = "moment" | "situation";
+
+/**
+ * Stream coach replies from /api/journal/needs-chat (Knowing Your Needs flow).
+ */
+function isAbortError(e: unknown): boolean {
+  return (
+    (e instanceof DOMException && e.name === "AbortError") ||
+    (e instanceof Error && e.name === "AbortError")
+  );
+}
+
+export async function streamNeedsChat(
+  scope: NeedsScope,
+  messages: { role: string; content: string }[],
+  onToken: (token: string) => void,
+  onDone: () => void,
+  onError: (err: Error) => void,
+  options?: { signal?: AbortSignal }
+): Promise<void> {
+  try {
+    const res = await fetch("/api/journal/needs-chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope, messages }),
+      signal: options?.signal,
+    });
+
+    if (!res.ok) {
+      let detail = "";
+      const text = await res.text();
+      try {
+        const j = JSON.parse(text) as { error?: string };
+        if (typeof j?.error === "string") detail = j.error;
+      } catch {
+        if (text) detail = text.slice(0, 500);
+      }
+      throw new Error(
+        detail
+          ? `Needs chat API error: ${res.status} — ${detail}`
+          : `Needs chat API error: ${res.status}`
+      );
+    }
+
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("No response body");
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith("data: ")) continue;
+
+        const data = trimmed.slice(6);
+        if (data === "[DONE]") {
+          onDone();
+          return;
+        }
+
+        try {
+          const parsed = JSON.parse(data);
+          const token = parsed.choices?.[0]?.delta?.content;
+          if (token) onToken(token);
+        } catch {
+          // skip malformed SSE lines
+        }
+      }
+    }
+
+    onDone();
+  } catch (err) {
+    if (isAbortError(err)) {
+      onDone();
+      return;
+    }
+    onError(err instanceof Error ? err : new Error(String(err)));
+  }
+}
+
 async function parseTreeResponse(res: Response): Promise<WhatIfTree> {
   if (!res.ok) {
     let detail = "";

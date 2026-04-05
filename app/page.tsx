@@ -2,7 +2,14 @@
 
 import { useEffect, useRef } from "react";
 import { useApp } from "@/context/AppContext";
-import { MessageCircle, GitBranch, BookOpen, PanelLeft, Diamond } from "lucide-react";
+import {
+  MessageCircle,
+  GitBranch,
+  BookOpen,
+  LayoutDashboard,
+  PanelLeft,
+  Diamond,
+} from "lucide-react";
 import ChatScreen from "@/components/chat/ChatScreen";
 import WhatIfScreen from "@/components/whatif/WhatIfScreen";
 import JournalScreen from "@/components/journal/JournalScreen";
@@ -16,6 +23,7 @@ const TABS: { key: ActiveTab; label: string; icon: typeof MessageCircle }[] = [
   { key: "chat", label: "Chat", icon: MessageCircle },
   { key: "whatif", label: "What If", icon: GitBranch },
   { key: "journal", label: "Journal", icon: BookOpen },
+  { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
 ];
 
 // ─── Inner layout (needs sidebar context) ───────────

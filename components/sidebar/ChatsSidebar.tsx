@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import {
   TreePine,
   MessageSquarePlus,
-  Moon,
   Search,
   LayoutDashboard,
   Trash2,
@@ -68,11 +67,6 @@ export default function ChatsSidebar() {
       label: "New Chat",
       icon: MessageSquarePlus,
       onClick: () => newChat(),
-    },
-    {
-      label: "New Shadow Work",
-      icon: Moon,
-      onClick: () => {/* coming soon */},
     },
     {
       label: "Search Chats",

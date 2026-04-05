@@ -334,6 +334,8 @@ interface AppContextValue {
   consumeShards: (amount?: number) => void;
   deleteEntry: (id: string) => void;
   clearDraft: () => void;
+  /** Replace or clear the journal draft (e.g. guided flows). */
+  setJournalDraft: (draft: Partial<JournalEntry> | null) => void;
   clearChat: () => void;
   newChat: () => void;
   loadSession: (id: string) => void;
@@ -679,6 +681,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "SET_DRAFT", draft: null });
   }, []);
 
+  const setJournalDraft = useCallback((draft: Partial<JournalEntry> | null) => {
+    dispatch({ type: "SET_DRAFT", draft });
+  }, []);
+
   const clearChat = useCallback(() => {
     dispatch({ type: "CLEAR_CHAT" });
     storageSet("messages", []);
@@ -704,6 +710,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         consumeShards,
         deleteEntry,
         clearDraft,
+        setJournalDraft,
         clearChat,
         newChat,
         loadSession,
